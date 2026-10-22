@@ -4,14 +4,19 @@ public class AntivirusApp {
     // Stores the antivirus application version
     private String version;
 
-    // Stores the name of the current user
-    private String user;
+    // Stores the User object created by the user system
+    private User<?> user;
 
-    // Constructor: initializes the user and application version
-    public AntivirusApp(String user, String version) {
+    // Constructor: initializes the User object and application version
+    public AntivirusApp(User<?> user, String version) {
+
+        // Check that the User object is not null
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
+        }
 
         // Check that the username is not null or blank
-        if (user == null || user.isBlank()) {
+        if (user.getUsername() == null || user.getUsername().isBlank()) {
             throw new IllegalArgumentException("User cannot be empty");
         }
 
@@ -20,11 +25,9 @@ public class AntivirusApp {
             throw new IllegalArgumentException("Version cannot be empty");
         }
 
-
-     // Store the user and version without surrounding spaces
-     this.user = user.trim();
-     this.version = version.trim();
-
+        // Store the User object and trimmed version
+        this.user = user;
+        this.version = version.trim();
     }
 
     // Displays a message when the scanner is requested
@@ -33,8 +36,8 @@ public class AntivirusApp {
         System.out.println("Starting antivirus scanner...");
     }
 
-    // TODO: Enable this method when Report.java is available.
-    // The real scanner will return a Report object.
+    // TODO: Enable this method when Report.java is available
+    // The real scanner will return a Report object
     /*
     public Report scan() {
         startScanner();
@@ -42,21 +45,36 @@ public class AntivirusApp {
     }
     */
 
+    // TODO: Connect this method to QuarantineMgr.java
+    // Prince's quarantine implementation will be integrated here
+    public void quarantine() {
+        throw new UnsupportedOperationException(
+            "Quarantine functionality not implemented yet"
+        );
+    }
+
+    // TODO: Connect this method to UpdateService.java
+    // Prince's update implementation will be integrated here
+    public void update() {
+        throw new UnsupportedOperationException(
+            "Update functionality not implemented yet"
+        );
+    }
 
     // Returns the current antivirus version
     public String getVersion() {
         return version;
     }
 
-    // Returns the current username
+    // Returns the current username from the User object
     public String getUser() {
-        return user;
+        return user.getUsername();
     }
 
     // Displays basic information about the antivirus application
     public void displayAppInfo() {
         System.out.println("Mini Antivirus");
-        System.out.println("User: " + user);
+        System.out.println("User: " + user.getUsername());
         System.out.println("Version: " + version);
     }
 
@@ -64,12 +82,10 @@ public class AntivirusApp {
     public boolean isVersion(String versionToCheck) {
         return version.equals(versionToCheck);
     }
-  
+
     // Checks whether the supplied username matches the current user
     public boolean isUser(String usernameToCheck) {
-        return user.equals(usernameToCheck);
+        return user.getUsername().equals(usernameToCheck);
     }
-
-
-    
 }
+
