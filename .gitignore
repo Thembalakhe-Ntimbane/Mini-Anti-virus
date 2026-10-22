@@ -2,3 +2,7 @@ blacklist.txt
 blacklist.tmp
 quarantine/
 *.class
+
+src/SignatureVerificationTest.java
+
+src/PrinceTest.java

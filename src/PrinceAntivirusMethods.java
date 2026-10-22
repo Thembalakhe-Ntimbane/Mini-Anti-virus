@@ -4,6 +4,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.KeyFactory;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
+
 public class PrinceAntivirusMethods {
 
   public void quarantine(String fileName) {
@@ -224,6 +230,31 @@ try {
 } catch (java.io.IOException e) {
     System.out.println("Error updating blacklist: " + e.getMessage());
 }
-}  
+} 
+// Verify that an antivirus update has a valid digital signature.
+// Actual verification will be implemented after the trusted key is available.
+private boolean verifyUpdateSignature(
+        byte[] updateData,
+        byte[] signatureBytes,
+        PublicKey trustedKey) {
+       
+    try {
+    // Initialise the digital signature verification algorithm.
+    Signature verifier = Signature.getInstance("SHA256withRSA");
+
+    // Use the trusted public key to verify the signature.
+    verifier.initVerify(trustedKey);
+
+    // Supply the exact downloaded data to be verified.
+    verifier.update(updateData);
+
+    // Return true only if the signature is valid.
+    return verifier.verify(signatureBytes);
+
+} catch (java.security.GeneralSecurityException e) {
+    System.out.println("Signature verification failed: " + e.getMessage());
+    return false;
+}
+} 
 
 }
