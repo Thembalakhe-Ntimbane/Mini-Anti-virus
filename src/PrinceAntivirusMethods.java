@@ -57,15 +57,49 @@ try {
         .connectTimeout(java.time.Duration.ofSeconds(10))
         .build();
  // TODO: Replace placeholder with an approved, authenticated update source.   
-String updateServerUrl = "https://example.com/blacklist.txt";
-
-if (updateServerUrl.equals("https://example.com/blacklist.txt")) {
-    System.out.println("Update unavailable: No approved update server configured.");
+String updateServerUrl = System.getenv("ANTIVIRUS_UPDATE_URL");
+if (updateServerUrl == null || updateServerUrl.isBlank()) {
+    System.out.println("Update unavailable: No update server configured.");
+    return;
+}
+if (!updateServerUrl.startsWith("https://")) {
+    System.out.println("Error: Update server must use HTTPS.");
     return;
 }
 
+URI serverUri;
+
+try {
+    serverUri = URI.create(updateServerUrl);
+
+    if (!"https".equalsIgnoreCase(serverUri.getScheme())
+            || serverUri.getHost() == null
+            || serverUri.getHost().isBlank()) {
+
+        System.out.println("Error: Invalid HTTPS update server address.");
+        return;
+    }
+
+} catch (IllegalArgumentException e) {
+    System.out.println("Error: Invalid update server URL.");
+    return;
+}
+String approvedServer = System.getenv("ANTIVIRUS_APPROVED_HOST");
+
+if (approvedServer == null || approvedServer.isBlank()) {
+    System.out.println("Error: No approved update host configured.");
+    return;
+}
+if (!serverUri.getHost().equalsIgnoreCase(approvedServer.trim())) {
+    System.out.println("Error: Update server is not approved.");
+    return;
+}
+
+System.out.println("Update server hostname matches the configured host.");
+
     HttpRequest request = HttpRequest.newBuilder()
     .timeout(java.time.Duration.ofSeconds(10))
+   
         .uri(URI.create(updateServerUrl))
         .GET()
         .build();
@@ -76,6 +110,11 @@ if (updateServerUrl.equals("https://example.com/blacklist.txt")) {
     );
 
     System.out.println("Server status: " + response.statusCode());
+    // Reject redirects to prevent updates from unapproved locations.
+if (response.statusCode() >= 300 && response.statusCode() < 400) {
+    System.out.println("Error: Update server redirect rejected.");
+    return;
+}
 
 if (response.statusCode() == 200) {
     System.out.println("Server responded successfully.");
