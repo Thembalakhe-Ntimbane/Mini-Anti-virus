@@ -53,10 +53,10 @@ try {
   public void update() {
     System.out.println("Checking for antivirus updates...");
     HttpClient client = HttpClient.newHttpClient();
-
+String updateServerUrl = "https://example.com/blacklist.txt";
     HttpRequest request = HttpRequest.newBuilder()
     .timeout(java.time.Duration.ofSeconds(10))
-        .uri(URI.create("https://example.com/blacklist.txt"))
+        .uri(URI.create(updateServerUrl))
         .GET()
         .build();
       try {
