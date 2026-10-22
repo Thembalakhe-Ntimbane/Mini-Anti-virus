@@ -53,7 +53,14 @@ try {
   public void update() {
     System.out.println("Checking for antivirus updates...");
     HttpClient client = HttpClient.newHttpClient();
+ // TODO: Replace placeholder with an approved, authenticated update source.   
 String updateServerUrl = "https://example.com/blacklist.txt";
+
+if (updateServerUrl.equals("https://example.com/blacklist.txt")) {
+    System.out.println("Update unavailable: No approved update server configured.");
+    return;
+}
+
     HttpRequest request = HttpRequest.newBuilder()
     .timeout(java.time.Duration.ofSeconds(10))
         .uri(URI.create(updateServerUrl))
