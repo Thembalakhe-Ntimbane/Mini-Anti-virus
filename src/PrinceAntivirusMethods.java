@@ -55,6 +55,7 @@ try {
     HttpClient client = HttpClient.newHttpClient();
 
     HttpRequest request = HttpRequest.newBuilder()
+    .timeout(java.time.Duration.ofSeconds(10))
         .uri(URI.create("https://example.com/blacklist.txt"))
         .GET()
         .build();
@@ -69,16 +70,25 @@ try {
 if (response.statusCode() == 200) {
     System.out.println("Server responded successfully.");
     String downloadedThreats = response.body();
+
+if (downloadedThreats == null || downloadedThreats.isBlank()) {
+    System.out.println("Error: Downloaded blacklist is empty.");
+    return;
+}
+
+    int maxDownloadSize = 1024 * 1024;
+
+if (downloadedThreats.length() > maxDownloadSize) {
+    System.out.println("Error: Downloaded blacklist is too large.");
+    return;
+}
     boolean updateVerified = false;
 
 if (!updateVerified) {
     System.out.println("Update rejected: Authenticity not verified.");
     return;
 }
-    if (downloadedThreats == null || downloadedThreats.isBlank()) {
-    System.out.println("Error: Downloaded blacklist is empty.");
-    return;
-}
+   
 String[] threatLines = downloadedThreats.split("\\R");
 
 for (String threat : threatLines) {
