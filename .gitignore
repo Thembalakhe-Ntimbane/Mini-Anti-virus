@@ -1,0 +1,4 @@
+blacklist.txt
+blacklist.tmp
+quarantine/
+*.class
