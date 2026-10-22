@@ -52,7 +52,10 @@ try {
     }
   public void update() {
     System.out.println("Checking for antivirus updates...");
-    HttpClient client = HttpClient.newHttpClient();
+    
+    HttpClient client = HttpClient.newBuilder()
+        .connectTimeout(java.time.Duration.ofSeconds(10))
+        .build();
  // TODO: Replace placeholder with an approved, authenticated update source.   
 String updateServerUrl = "https://example.com/blacklist.txt";
 
