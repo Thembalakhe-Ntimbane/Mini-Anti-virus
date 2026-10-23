@@ -53,13 +53,30 @@ public class AntivirusApp {
         );
     }
 
-    // TODO: Connect this method to UpdateService.java
-    // Prince's update implementation will be integrated here
+    
+    /**
+     * Checks whether an antivirus database update is available.
+     * Actual database installation will be integrated later.
+     */
     public void update() {
-        throw new UnsupportedOperationException(
-            "Update functionality not implemented yet"
-        );
+
+        // Create an UpdateService object with example versions
+        // Current database version = 2
+        // Latest available database version = 3
+        UpdateService updater = new UpdateService(2, 3);
+
+        // Check whether a newer database version is available
+        boolean updateAvailable = updater.check();
+
+        // Display the result of the update check
+        if (updateAvailable) {
+            System.out.println("A newer antivirus database version is available.");
+            System.out.println("Database installation is not configured yet.");
+        } else {
+            System.out.println("Antivirus database is already up to date.");
+        }
     }
+
 
     // Returns the current antivirus version
     public String getVersion() {
