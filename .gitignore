@@ -6,3 +6,11 @@ quarantine/
 src/SignatureVerificationTest.java
 
 src/PrinceTest.java
+
+# Local quarantine testing files
+src/QuarantineMgrTest.java
+quarantine-test.txt
+
+quarantine-delete-test.txt
+# Local VS Code settings
+.vscode/
