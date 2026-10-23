@@ -36,14 +36,21 @@ public class AntivirusApp {
         System.out.println("Starting antivirus scanner...");
     }
 
-    // TODO: Enable this method when Report.java is available
-    // The real scanner will return a Report object
-    /*
+  
+    /**
+     * Scans files for threats.
+     *
+     * @return a Report containing the scan results
+     */
     public Report scan() {
-        startScanner();
-        return null;
+
+        // The actual Scanner class is not connected yet.
+        // Prevent the application from returning fake scan results.
+        throw new UnsupportedOperationException(
+            "Scanner integration not implemented yet"
+        );
     }
-    */
+
 
     // TODO: Connect this method to QuarantineMgr.java
     // Prince's quarantine implementation will be integrated here
