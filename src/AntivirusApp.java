@@ -58,15 +58,12 @@ public class AntivirusApp {
     /**
      * Moves the harmless prototype test file into quarantine.
      */
-    public void quarantine() {
+    public void quarantine(String filePath) {
 
         // Create Prince's quarantine manager
         QuarantineMgr manager = new QuarantineMgr();
 
-        // Select the harmless test file
-        String filePath = "prototype-test/suspicious.exe";
-
-        // Move the file into quarantine
+        // Move the file selected by the user
         java.io.File quarantinedFile = manager.quarantine(filePath);
 
         // Display the result
