@@ -14,3 +14,8 @@ quarantine-test.txt
 quarantine-delete-test.txt
 # Local VS Code settings
 .vscode/
+quarantine-persistence-test.txt
+
+src/*PersistenceTest.java
+
+src/QuarantineIntegrationTest.java
