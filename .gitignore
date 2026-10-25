@@ -19,3 +19,13 @@ quarantine-persistence-test.txt
 src/*PersistenceTest.java
 
 src/QuarantineIntegrationTest.java
+src/QuarantineLoadTest.java
+src/QuarantineRestartTest.java
+quarantine-sync-test.txt 
+src/QuarantineSyncTest.java
+quarantine-delete-sync-test.txt
+src/QuarantineDeleteSyncTest.java
+src/QuarantineLoadTest.javaQuarantineLoadTest.java
+src/QuarantineMgr.backup
+src/*LoadTest*.java
+src/*.backup

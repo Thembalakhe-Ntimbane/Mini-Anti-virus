@@ -1,11 +1,12 @@
 
+
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.LinkOption;
-import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -15,130 +16,178 @@ import java.util.Map;
 /**
  * Manages suspicious files detected by the antivirus system.
  *
- * This class moves files into quarantine and allows them
- * to be restored or deleted.
+ * Supports quarantining, restoring and deleting files.
+ * Original file locations are saved so they can be
+ * recovered after restarting the application.
  */
 public class QuarantineMgr {
 
     /**
-     * Stores the original location of quarantined files.
+     * Stores the original location of each quarantined file.
      *
-     * Key: Path inside the quarantine folder.
-     * Value: Original file path.
-     *
-     * Records are kept in memory and saved to a file.
+     * Key: Absolute path of the quarantined file.
+     * Value: Absolute path of the original file.
      */
-    private final Map<Path, Path> originalFilePaths = new HashMap<>();
+    private final Map<Path, Path> originalFilePaths =
+            new HashMap<>();
 
-    /**
-     * File used to store the quarantine records.
-     */
+    // Directory containing quarantined files.
+    private final Path quarantineDirectory =
+            Path.of("quarantine").toAbsolutePath().normalize();
+
+    // File containing persistent quarantine records.
     private final Path recordsFile =
-            Path.of("quarantine", "records.txt");
+            quarantineDirectory.resolve("records.txt");
+
+    // Prevent operations if record loading or saving fails.
+    private boolean recordsAvailable = true;
 
     /**
-     * Moves a suspicious file into the quarantine folder.
+     * Creates a quarantine manager.
+     *
+     * Previously saved records are loaded automatically.
+     */
+    public QuarantineMgr() {
+
+        recordsAvailable = loadRecords();
+    }
+
+    /**
+     * Moves a suspicious file into quarantine.
      *
      * @param fileName Path of the suspicious file.
-     * @return The quarantined file, or null if the operation fails.
+     * @return The quarantined file, or null on failure.
      */
     public File quarantine(String fileName) {
 
-        // Check that a filename was provided.
+        if (!recordsAvailable) {
+            System.out.println(
+                    "Error: Quarantine records are unavailable."
+            );
+            return null;
+        }
+
+        // Reject missing or empty filenames.
         if (fileName == null || fileName.isBlank()) {
             System.out.println("Error: No file specified.");
             return null;
         }
 
-        File suspiciousFile = new File(fileName);
-
         // Remember the original file location.
         Path originalPath =
-                suspiciousFile.toPath().toAbsolutePath().normalize();
+                Path.of(fileName).toAbsolutePath().normalize();
 
-        // Confirm that the source is an existing file.
-        if (!suspiciousFile.isFile()) {
-            System.out.println("Error: File does not exist.");
+        // Reject missing files, directories and symbolic links.
+        if (!Files.isRegularFile(
+                originalPath,
+                LinkOption.NOFOLLOW_LINKS)) {
+
+            System.out.println(
+                    "Error: Source is not a regular file."
+            );
             return null;
         }
 
-        // Create the quarantine folder if necessary.
-        File quarantineFolder = new File("quarantine");
-
-        if (!quarantineFolder.exists() && !quarantineFolder.mkdir()) {
-            System.out.println("Error: Could not create quarantine folder.");
+        // Do not quarantine a file already inside quarantine.
+        if (originalPath.startsWith(quarantineDirectory)) {
+            System.out.println(
+                    "Error: File is already inside quarantine."
+            );
             return null;
         }
-
-        if (!quarantineFolder.isDirectory()) {
-            System.out.println("Error: Quarantine location is not a folder.");
-            return null;
-        }
-
-        // Prepare the destination file.
-        File destinationFile =
-                new File(quarantineFolder, suspiciousFile.getName());
-
-        // Do not replace an existing quarantined file.
-        if (destinationFile.exists()) {
-            System.out.println("Error: File already exists in quarantine.");
-            return null;
-        }
-
-        Path quarantinePath =
-                destinationFile.toPath().toAbsolutePath().normalize();
 
         try {
-            // Move the suspicious file into quarantine.
-            Files.move(
-                    suspiciousFile.toPath(),
-                    destinationFile.toPath()
+            // Create the quarantine folder if necessary.
+            Files.createDirectories(quarantineDirectory);
+
+            // Do not accept a symbolic-link quarantine folder.
+            if (Files.isSymbolicLink(quarantineDirectory)) {
+                System.out.println(
+                        "Error: Invalid quarantine directory."
+                );
+                return null;
+            }
+
+            // Prepare the quarantine destination.
+            Path quarantinePath =
+                    quarantineDirectory.resolve(
+                            originalPath.getFileName()
+                    ).normalize();
+
+            // Never replace an existing quarantined file.
+            if (Files.exists(
+                    quarantinePath,
+                    LinkOption.NOFOLLOW_LINKS)) {
+
+                System.out.println(
+                        "Error: File already exists in quarantine."
+                );
+                return null;
+            }
+
+            // Move the file into quarantine.
+            Files.move(originalPath, quarantinePath);
+
+            // Store the original path in memory.
+            originalFilePaths.put(
+                    quarantinePath,
+                    originalPath
             );
 
-            // Record the original location in memory.
-            originalFilePaths.put(quarantinePath, originalPath);
-
-            // Save the record permanently before reporting success.
+            // Save the record permanently.
             if (!saveRecords()) {
+
                 System.out.println(
-                        "Error: Quarantine record could not be saved."
+                        "Error: Could not save quarantine record."
                 );
 
-                // Attempt to undo the quarantine operation.
+                // Attempt to reverse the move safely.
                 try {
                     Files.move(
-                            destinationFile.toPath(),
+                            quarantinePath,
                             originalPath
                     );
 
-                    // Remove the record after successful rollback.
                     originalFilePaths.remove(quarantinePath);
 
                     System.out.println(
                             "File returned to its original location."
                     );
 
-                } catch (IOException e) {
-                    // Retain the in-memory record if rollback fails.
+                } catch (IOException rollbackError) {
+
+                    // Keep the in-memory record if rollback fails.
                     System.out.println(
                             "WARNING: File remains in quarantine."
                     );
+
                     System.out.println(
                             "Original location: " + originalPath
                     );
+
                     System.out.println(
-                            "Rollback error: " + e.getMessage()
+                            "Rollback error: "
+                                    + rollbackError.getMessage()
                     );
                 }
 
+                // Stop further changes until records are checked.
+                recordsAvailable = false;
                 return null;
             }
 
-            System.out.println("File moved to quarantine successfully.");
-            return destinationFile;
+            System.out.println(
+                    "File moved to quarantine successfully."
+            );
+
+            return quarantinePath.toFile();
 
         } catch (IOException e) {
-            System.out.println("Error moving file: " + e.getMessage());
+
+            System.out.println(
+                    "Error moving file: " + e.getMessage()
+            );
+
             return null;
         }
     }
@@ -146,21 +195,31 @@ public class QuarantineMgr {
     /**
      * Restores a quarantined file to its original location.
      *
+     * The saved record is removed after successful restoration.
+     *
      * @param file The quarantined file to restore.
      */
     public void restore(File file) {
 
-        // Reject a missing file reference.
-        if (file == null) {
-            System.out.println("Error: No file specified for restoration.");
+        if (!recordsAvailable) {
+            System.out.println(
+                    "Error: Quarantine records are unavailable."
+            );
             return;
         }
 
-        // Identify the quarantined file location.
+        if (file == null) {
+            System.out.println(
+                    "Error: No file specified for restoration."
+            );
+            return;
+        }
+
+        // Find the absolute path of the quarantined file.
         Path quarantinePath =
                 file.toPath().toAbsolutePath().normalize();
 
-        // Find the recorded original location.
+        // Find its recorded original location.
         Path originalPath =
                 originalFilePaths.get(quarantinePath);
 
@@ -171,17 +230,32 @@ public class QuarantineMgr {
             return;
         }
 
-        // Make sure the quarantined file exists.
+        // Only allow files directly inside quarantine.
+        if (!quarantineDirectory.equals(
+                quarantinePath.getParent())) {
+
+            System.out.println(
+                    "Error: File is outside the quarantine directory."
+            );
+            return;
+        }
+
+        // Reject missing files and symbolic links.
         if (!Files.isRegularFile(
                 quarantinePath,
                 LinkOption.NOFOLLOW_LINKS)) {
 
-            System.out.println("Error: Quarantined file does not exist.");
+            System.out.println(
+                    "Error: Quarantined file does not exist."
+            );
             return;
         }
 
-        // Do not overwrite an existing destination file.
-        if (Files.exists(originalPath)) {
+        // Never overwrite the original location.
+        if (Files.exists(
+                originalPath,
+                LinkOption.NOFOLLOW_LINKS)) {
+
             System.out.println(
                     "Error: A file already exists at the original location."
             );
@@ -190,18 +264,34 @@ public class QuarantineMgr {
 
         try {
             // Move the file back to its original location.
-            Files.move(
-                    quarantinePath,
-                    originalPath
-            );
+            Files.move(quarantinePath, originalPath);
 
-            // Remove its in-memory record after restoration.
+            // Remove the record from memory.
             originalFilePaths.remove(quarantinePath);
 
             System.out.println("File restored successfully.");
             System.out.println("Restored to: " + originalPath);
 
+            // NEW: Synchronize the saved records.
+            if (saveRecords()) {
+
+                System.out.println(
+                        "Restoration record removed successfully."
+                );
+
+            } else {
+
+                // The file was restored, but records.txt is outdated.
+                recordsAvailable = false;
+
+                System.out.println(
+                        "WARNING: File restored, but records.txt "
+                                + "was not updated."
+                );
+            }
+
         } catch (IOException e) {
+
             System.out.println(
                     "Error restoring file: " + e.getMessage()
             );
@@ -211,21 +301,31 @@ public class QuarantineMgr {
     /**
      * Deletes a registered quarantined file.
      *
+     * The saved record is removed after successful deletion.
+     *
      * @param file The quarantined file to delete.
      */
     public void delete(File file) {
 
-        // Reject a missing file reference.
-        if (file == null) {
-            System.out.println("Error: No file specified for deletion.");
+        if (!recordsAvailable) {
+            System.out.println(
+                    "Error: Quarantine records are unavailable."
+            );
             return;
         }
 
-        // Identify the quarantined file location.
+        if (file == null) {
+            System.out.println(
+                    "Error: No file specified for deletion."
+            );
+            return;
+        }
+
+        // Determine the target file path.
         Path quarantinePath =
                 file.toPath().toAbsolutePath().normalize();
 
-        // Check that the file has a quarantine record.
+        // Only accept registered quarantine files.
         if (!originalFilePaths.containsKey(quarantinePath)) {
             System.out.println(
                     "Error: File is not registered in quarantine."
@@ -233,19 +333,17 @@ public class QuarantineMgr {
             return;
         }
 
-        // Identify the quarantine directory.
-        Path quarantineDirectory =
-                Path.of("quarantine").toAbsolutePath().normalize();
+        // Ensure the file belongs directly to quarantine.
+        if (!quarantineDirectory.equals(
+                quarantinePath.getParent())) {
 
-        // Reject files outside the quarantine directory.
-        if (!quarantineDirectory.equals(quarantinePath.getParent())) {
             System.out.println(
                     "Error: File is outside the quarantine directory."
             );
             return;
         }
 
-        // Reject directories and symbolic links.
+        // Reject directories, missing files and symbolic links.
         if (!Files.isRegularFile(
                 quarantinePath,
                 LinkOption.NOFOLLOW_LINKS)) {
@@ -257,17 +355,35 @@ public class QuarantineMgr {
         }
 
         try {
-            // Delete the registered file from quarantine.
+            // Delete the registered quarantined file.
             Files.delete(quarantinePath);
 
-            // Remove its in-memory record after deletion.
+            // Remove its record from memory.
             originalFilePaths.remove(quarantinePath);
 
             System.out.println(
                     "Quarantined file deleted successfully."
             );
 
+            // NEW: Synchronize the saved records.
+            if (saveRecords()) {
+
+                System.out.println(
+                        "Deletion record removed successfully."
+                );
+
+            } else {
+
+                recordsAvailable = false;
+
+                System.out.println(
+                        "WARNING: File deleted, but records.txt "
+                                + "was not updated."
+                );
+            }
+
         } catch (IOException e) {
+
             System.out.println(
                     "Error deleting quarantined file: " + e.getMessage()
             );
@@ -275,47 +391,48 @@ public class QuarantineMgr {
     }
 
     /**
-     * Saves the current quarantine records to records.txt.
+     * Saves active quarantine records to records.txt.
      *
-     * The paths are Base64-encoded to preserve special characters.
-     * The records are written to a temporary file first.
+     * File paths are Base64-encoded to preserve characters.
+     * A temporary file is written before replacing records.txt.
      *
-     * @return true if saving succeeds, false otherwise.
+     * @return true if saving succeeded.
      */
     private boolean saveRecords() {
 
-        // Prepare a temporary file beside records.txt.
+        // Prepare the temporary records file.
         Path temporaryRecordsFile =
                 recordsFile.resolveSibling("records.tmp");
 
-        // Prepare the text records.
         List<String> records = new ArrayList<>();
 
-        for (Map.Entry<Path, Path> entry : originalFilePaths.entrySet()) {
+        // Encode all currently active quarantine records.
+        for (Map.Entry<Path, Path> entry
+                : originalFilePaths.entrySet()) {
 
-            // Encode the quarantine location.
-            String quarantineLocation = Base64.getEncoder()
-                    .encodeToString(
+            String quarantineLocation =
+                    Base64.getEncoder().encodeToString(
                             entry.getKey().toString()
                                     .getBytes(StandardCharsets.UTF_8)
                     );
 
-            // Encode the original file location.
-            String originalLocation = Base64.getEncoder()
-                    .encodeToString(
+            String originalLocation =
+                    Base64.getEncoder().encodeToString(
                             entry.getValue().toString()
                                     .getBytes(StandardCharsets.UTF_8)
                     );
 
-            // Store both paths in one record.
-            records.add(quarantineLocation + "\t" + originalLocation);
+            // Store both paths separated by a tab.
+            records.add(
+                    quarantineLocation + "\t" + originalLocation
+            );
         }
 
         try {
-            // Ensure the quarantine directory exists.
-            Files.createDirectories(recordsFile.getParent());
+            // Ensure the quarantine folder exists.
+            Files.createDirectories(quarantineDirectory);
 
-            // Write the records to a temporary file.
+            // Write the updated records to the temporary file.
             Files.write(
                     temporaryRecordsFile,
                     records,
@@ -330,17 +447,184 @@ public class QuarantineMgr {
                     StandardCopyOption.REPLACE_EXISTING
             );
 
-            System.out.println("Quarantine records saved successfully.");
+            System.out.println(
+                    "Quarantine records saved successfully."
+            );
+
             return true;
 
         } catch (IOException e) {
+
             System.out.println(
-                    "Error saving quarantine records: " + e.getMessage()
+                    "Error saving quarantine records: "
+                            + e.getMessage()
+            );
+
+            return false;
+        }
+    }
+
+    /**
+     * Loads saved quarantine records from records.txt.
+     *
+     * Valid records are loaded into memory.
+     * Stale records referring to missing quarantine files
+     * are skipped.
+     *
+     * The records file is not rewritten during loading.
+     *
+     * @return true if loading completed successfully.
+     */
+    private boolean loadRecords() {
+
+        // A new installation may not have saved records yet.
+        if (!Files.exists(
+                recordsFile,
+                LinkOption.NOFOLLOW_LINKS)) {
+
+            System.out.println(
+                    "No previous quarantine records found."
+            );
+
+            return true;
+        }
+
+        // Reject invalid or symbolic-link records files.
+        if (!Files.isRegularFile(
+                recordsFile,
+                LinkOption.NOFOLLOW_LINKS)) {
+
+            System.out.println(
+                    "Error: Invalid quarantine records file."
+            );
+
+            return false;
+        }
+
+        // Load records into a temporary map first.
+        Map<Path, Path> loadedRecords = new HashMap<>();
+
+        int staleRecords = 0;
+
+        try {
+            // Read all saved records.
+            List<String> lines = Files.readAllLines(
+                    recordsFile,
+                    StandardCharsets.UTF_8
+            );
+
+            for (String line : lines) {
+
+                // Each record must contain exactly two fields.
+                String[] parts = line.split("\t", -1);
+
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException(
+                            "Invalid quarantine record format."
+                    );
+                }
+
+                // Decode the quarantined file path.
+                String quarantineLocation = new String(
+                        Base64.getDecoder().decode(parts[0]),
+                        StandardCharsets.UTF_8
+                );
+
+                // Decode the original file path.
+                String originalLocation = new String(
+                        Base64.getDecoder().decode(parts[1]),
+                        StandardCharsets.UTF_8
+                );
+
+                // Convert the decoded strings to absolute paths.
+                Path quarantinePath =
+                        Path.of(quarantineLocation)
+                                .toAbsolutePath()
+                                .normalize();
+
+                Path originalPath =
+                        Path.of(originalLocation)
+                                .toAbsolutePath()
+                                .normalize();
+
+                // A quarantined file must be directly inside quarantine.
+                if (!quarantineDirectory.equals(
+                        quarantinePath.getParent())) {
+
+                    throw new IllegalArgumentException(
+                            "Record points outside quarantine."
+                    );
+                }
+
+                // Original and quarantine paths must differ.
+                if (quarantinePath.equals(originalPath)) {
+                    throw new IllegalArgumentException(
+                            "Invalid original file location."
+                    );
+                }
+
+                // Reject original paths pointing into quarantine.
+                if (originalPath.startsWith(quarantineDirectory)) {
+                    throw new IllegalArgumentException(
+                            "Invalid original file location."
+                    );
+                }
+
+                // Reject duplicate quarantine records.
+                if (loadedRecords.containsKey(quarantinePath)) {
+                    throw new IllegalArgumentException(
+                            "Duplicate quarantine record."
+                    );
+                }
+
+                // Skip records for files no longer in quarantine.
+                if (!Files.isRegularFile(
+                        quarantinePath,
+                        LinkOption.NOFOLLOW_LINKS)) {
+
+                    staleRecords++;
+
+                    System.out.println(
+                            "Warning: Stale quarantine record skipped: "
+                                    + quarantinePath.getFileName()
+                    );
+
+                    continue;
+                }
+
+                // Add this validated record to the temporary map.
+                loadedRecords.put(
+                        quarantinePath,
+                        originalPath
+                );
+            }
+
+            // Accept the records after all entries are processed.
+            originalFilePaths.clear();
+            originalFilePaths.putAll(loadedRecords);
+
+            System.out.println(
+                    "Quarantine records loaded successfully."
+            );
+
+            System.out.println(
+                    "Records loaded: " + originalFilePaths.size()
+            );
+
+            System.out.println(
+                    "Stale records skipped: " + staleRecords
+            );
+
+            return true;
+
+        } catch (IOException | IllegalArgumentException e) {
+
+            System.out.println(
+                    "Error loading quarantine records: "
+                            + e.getMessage()
             );
 
             return false;
         }
     }
 }
-
-
