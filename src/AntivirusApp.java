@@ -1,13 +1,22 @@
 
 public class AntivirusApp {
 
-    // Stores the antivirus application version
-    private String version;
+// Stores the antivirus application version.
+private String version;
 
-    // Stores the User object created by the user system
-    private User<?> user;
+// Stores the current application user.
+private User<?> user;
 
-    // Constructor: initializes the User object and application version
+// Shared threat database for the application.
+private ThreatDB database = new ThreatDB();
+
+// Update service uses the shared threat database.
+private UpdateService updateService =
+        new UpdateService(2, 3, database);
+
+// Uses the same threat database to check known signatures.
+private ScanEngine scanEngine = new ScanEngine(database);
+        // Constructor: initializes the User object and application version
     public AntivirusApp(User<?> user, String version) {
 
         // Check that the User object is not null
@@ -52,7 +61,24 @@ public class AntivirusApp {
         return scanner.startScan();
     }
 
+/**
+ * Checks a demonstration threat signature against the database.
+ *
+ * @param signature The signature to search for.
+ * @return true if the signature exists in the database.
+ */
+public boolean checkThreatSignature(String signature) {
 
+    // Reject missing or blank signatures.
+    if (signature == null || signature.isBlank()) {
+        throw new IllegalArgumentException(
+            "Threat signature cannot be empty"
+        );
+    }
+
+    // Use ScanEngine to search the shared threat database.
+    return scanEngine.analyze(signature);
+}
 
 
     /**
@@ -79,31 +105,32 @@ public class AntivirusApp {
 
 
 
-    /**
-     * Checks whether an antivirus database update is available.
-     * Actual database installation will be integrated later.
-     */
-    public void update() {
 
-        // Create an UpdateService object with example versions
-        // Current database version = 2
-        // Latest available database version = 3
-        UpdateService updater = new UpdateService(2, 3);
+/**
+ * Checks for and installs a local demonstration
+ * antivirus database update.
+ */
+public void update() {
 
-        // Check whether a newer database version is available
-        boolean updateAvailable = updater.check();
+    // Check whether a newer database version is available.
+    if (updateService.check()) {
 
-        // Display the result of the update check
-        if (updateAvailable) {
-            System.out.println("A newer antivirus database version is available.");
-            System.out.println("Database installation is not configured yet.");
-        } else {
-            System.out.println("Antivirus database is already up to date.");
-        }
+        System.out.println(
+            "A newer antivirus database version is available."
+        );
+
+        // Use the existing update service to install the update.
+        updateService.updateDB();
+
+    } else {
+
+        // No update is necessary because the database is current.
+        System.out.println(
+            "Antivirus database is already up to date."
+        );
     }
-
-
-    // Returns the current antivirus version
+}
+  // Returns the current antivirus version
     public String getVersion() {
         return version;
     }

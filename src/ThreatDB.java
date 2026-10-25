@@ -23,6 +23,32 @@ public class ThreatDB {
         return threats.get(hash);
     }
 
+    /**
+ * Adds a new threat definition to the database.
+ *
+ * @param threat The threat definition to store.
+ */
+public void addThreat(Threat threat) {
+
+    // Prevent null threats from being added.
+    if (threat == null) {
+        throw new IllegalArgumentException("Threat cannot be null");
+    }
+
+    // Get the signature used to identify the threat.
+    String signature = threat.getSignature();
+
+    // Reject threats without a valid signature.
+    if (signature == null || signature.isBlank()) {
+        throw new IllegalArgumentException("Threat signature cannot be empty");
+    }
+
+    // Store the threat using its signature as the key.
+    threats.put(signature, threat);
+
+    // Record the time of the database modification.
+    lastUpdated = new Date();
+}
     public void update() {
         lastUpdated = new Date();
         System.out.println("Threat database updated.");
