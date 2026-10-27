@@ -1,0 +1,257 @@
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+public class AntivirusApp {
+
+    // Stores the antivirus application version and user.
+    private final String version;
+    private final User<?> user;
+
+    // Variables used to manage the scanning process.
+    private final AtomicBoolean stopRequested = new AtomicBoolean(false);
+    private final AtomicLong filesScanned = new AtomicLong(0);
+
+    private volatile Thread scanThread;
+    private volatile String scanStatus = "Idle";
+
+    // Constructor
+    public AntivirusApp(User<?> user, String version) {
+
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
+        }
+
+        if (user.getUsername() == null ||
+                user.getUsername().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Username cannot be empty");
+        }
+
+        if (version == null || version.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Version cannot be empty");
+        }
+
+        this.user = user;
+        this.version = version.trim();
+    }
+
+    // Displays a message when the scanner is requested.
+    public void startScanner() {
+        System.out.println(
+                "Provide a directory path to start scanning.");
+    }
+
+    // Starts scanning a directory on a separate thread.
+    public synchronized void startScanner(String scanPath) {
+
+        if (scanPath == null || scanPath.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Scan path cannot be empty");
+        }
+
+        Path root = Path.of(scanPath)
+                .toAbsolutePath()
+                .normalize();
+
+        if (!Files.exists(root)) {
+            throw new IllegalArgumentException(
+                    "Path does not exist: " + root);
+        }
+
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException(
+                    "Path is not a directory: " + root);
+        }
+
+        if (scanThread != null && scanThread.isAlive()) {
+            System.out.println("A scan is already running.");
+            return;
+        }
+
+        stopRequested.set(false);
+        filesScanned.set(0);
+        scanStatus = "Running";
+
+        scanThread = new Thread(
+                () -> scanDirectory(root),
+                "Antivirus-Scanner");
+
+        scanThread.start();
+
+        System.out.println("Scan started for: " + root);
+    }
+
+    // Requests the running scan to stop.
+    public void stopScanner() {
+
+        if (scanThread != null && scanThread.isAlive()) {
+            stopRequested.set(true);
+            scanStatus = "Stopping";
+
+            System.out.println(
+                    "Stop requested. The scan will stop shortly.");
+
+        } else {
+            System.out.println("No scan is currently running.");
+        }
+    }
+
+    // Visits files and subdirectories recursively.
+    private void scanDirectory(Path root) {
+
+        try {
+
+            Files.walkFileTree(root,
+                    new SimpleFileVisitor<Path>() {
+
+                @Override
+                public FileVisitResult preVisitDirectory(
+                        Path directory,
+                        BasicFileAttributes attributes) {
+
+                    if (stopRequested.get()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+
+                    System.out.println(
+                            "Directory: " + directory);
+
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(
+                        Path file,
+                        BasicFileAttributes attributes) {
+
+                    if (stopRequested.get()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+
+                    filesScanned.incrementAndGet();
+
+                    System.out.println("File: " + file);
+
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(
+                        Path file,
+                        IOException exception) {
+
+                    System.err.println(
+                            "Could not access: " + file
+                            + " (" + exception.getMessage() + ")");
+
+                    if (stopRequested.get()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+
+        } catch (IOException exception) {
+
+            scanStatus = "Failed";
+
+            System.err.println(
+                    "Scan failed: " + exception.getMessage());
+
+            return;
+
+        } finally {
+
+            if (stopRequested.get()) {
+                scanStatus = "Stopped";
+
+            } else if (!"Failed".equals(scanStatus)) {
+                scanStatus = "Completed";
+            }
+
+            scanThread = null;
+
+            System.out.println(
+                    "Scan status: " + scanStatus);
+
+            System.out.println(
+                    "Files visited: " + filesScanned.get());
+        }
+    }
+
+    // Returns the current scan status.
+    public String getScanStatus() {
+        return scanStatus;
+    }
+
+    // Returns the number of files visited.
+    public long getFilesScanned() {
+        return filesScanned.get();
+    }
+
+    // Quarantine functionality will be integrated later.
+    public void quarantine() {
+
+        throw new UnsupportedOperationException(
+                "Quarantine functionality not implemented yet");
+    }
+
+    // Checks whether an antivirus database update is available.
+    public void update() {
+
+        UpdateService updater = new UpdateService(2, 3);
+
+        boolean updateAvailable = updater.check();
+
+        if (updateAvailable) {
+
+            System.out.println(
+                    "A newer antivirus database version is available.");
+
+            System.out.println(
+                    "Database installation is not configured yet.");
+
+        } else {
+
+            System.out.println(
+                    "Antivirus database is already up to date.");
+        }
+    }
+
+    // Returns the current antivirus version.
+    public String getVersion() {
+        return version;
+    }
+
+    // Returns the current username.
+    public String getUser() {
+        return user.getUsername();
+    }
+
+    // Displays basic application information.
+    public void displayAppInfo() {
+
+        System.out.println("Mini Antivirus");
+        System.out.println("User: " + user.getUsername());
+        System.out.println("Version: " + version);
+        System.out.println("Scan status: " + scanStatus);
+    }
+
+    // Checks whether the supplied version matches.
+    public boolean isVersion(String versionToCheck) {
+        return version.equals(versionToCheck);
+    }
+
+    // Checks whether the supplied username matches.
+    public boolean isUser(String usernameToCheck) {
+        return user.getUsername().equals(usernameToCheck);
+    }
+}
