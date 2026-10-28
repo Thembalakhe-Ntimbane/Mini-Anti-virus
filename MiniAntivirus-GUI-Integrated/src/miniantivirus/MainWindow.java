@@ -12,23 +12,31 @@ public class MainWindow extends javax.swing.JFrame {
             java.util.logging.Logger.getLogger(MainWindow.class.getName());
 
     private Scanner scanner;
-    private QuarantineMgr quarantineMgr = new QuarantineMgr();
+    private final QuarantineMgr quarantineMgr = new QuarantineMgr();
+    private final ThreatDB threatDB = new ThreatDB();
+
     private SwingWorker<Report, Void> scanWorker;
+    private Report lastReport;
+    private String lastScanStatus = "No scan performed";
 
     public MainWindow() {
-    initComponents();
+        initComponents();
 
-    startBtn.addActionListener(this::startBtnActionPerformed);
-    stopBtn.addActionListener(this::stopBtnActionPerformed);
-  
-    restoreBtn.addActionListener(this::restoreBtnActionPerformed);
-    deleteBtn.addActionListener(this::deleteBtnActionPerformed);
-}
+        startBtn.addActionListener(this::startBtnActionPerformed);
+        stopBtn.addActionListener(this::stopBtnActionPerformed);
+        restoreBtn.addActionListener(this::restoreBtnActionPerformed);
+        deleteBtn.addActionListener(this::deleteBtnActionPerformed);
+        reportBtn.addActionListener(this::reportBtnActionPerformed);
+        updateBtn.addActionListener(this::updateBtnActionPerformed);
 
-    
-    // <editor-fold defaultstate="collapsed" desc="Generated Code">
+        // quarantineBtn and browseBtn already have listeners
+        // inside initComponents(). Do not register them twice.
+        refreshQuarantineTable();
+        updateDatabaseLabel();
+    }
+
+    // GUI setup
     private void initComponents() {
-
         jPanel1 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         pathField = new javax.swing.JTextField();
@@ -75,34 +83,18 @@ public class MainWindow extends javax.swing.JFrame {
 
         getContentPane().add(jPanel1, java.awt.BorderLayout.PAGE_START);
 
-        resultTable.setModel(new javax.swing.table.DefaultTableModel(
-                new Object[][]{
-                    {null, null, null, null},
-                    {null, null, null, null},
-                    {null, null, null, null},
-                    {null, null, null, null}
-                },
-                new String[]{
-                    "Type", "Severity", "Signature", "File Path"
-                }
+        resultTable.setModel(new DefaultTableModel(
+                new Object[][]{},
+                new String[]{"Type", "Severity", "Signature", "File Path"}
         ));
         jScrollPane1.setViewportView(resultTable);
-
         jTabbedPane1.addTab("Scan Results", jScrollPane1);
 
-        quarantineTable.setModel(new javax.swing.table.DefaultTableModel(
-                new Object[][]{
-                    {null, null},
-                    {null, null},
-                    {null, null},
-                    {null, null}
-                },
-                new String[]{
-                    "File Path", "Date"
-                }
+        quarantineTable.setModel(new DefaultTableModel(
+                new Object[][]{},
+                new String[]{"File Path", "Date"}
         ));
         jScrollPane2.setViewportView(quarantineTable);
-
         jTabbedPane1.addTab("Quarantine", jScrollPane2);
 
         getContentPane().add(jTabbedPane1, java.awt.BorderLayout.CENTER);
@@ -112,7 +104,6 @@ public class MainWindow extends javax.swing.JFrame {
         quarantineBtn.setText("Quarantine");
         quarantineBtn.addActionListener(this::quarantineBtnActionPerformed);
         jPanel5.add(quarantineBtn);
-        quarantineBtn.getAccessibleContext().setAccessibleName("Quarantine");
 
         restoreBtn.setText("Restore");
         restoreBtn.setEnabled(false);
@@ -132,41 +123,31 @@ public class MainWindow extends javax.swing.JFrame {
         jPanel2.add(jPanel5);
 
         jPanel3.setLayout(new java.awt.BorderLayout());
-
         statusLabel.setText("Status: Ready");
         jPanel3.add(statusLabel, java.awt.BorderLayout.CENTER);
         jPanel3.add(progress, java.awt.BorderLayout.PAGE_END);
-
         jPanel2.add(jPanel3);
 
         jPanel4.setLayout(new java.awt.FlowLayout(2));
-
         dbLabel.setText("Database last updated: --");
         jPanel4.add(dbLabel);
-
         jPanel2.add(jPanel4);
 
         getContentPane().add(jPanel2, java.awt.BorderLayout.SOUTH);
-
         pack();
     }
-    // </editor-fold>
 
     // Browse button
     private void browseBtnActionPerformed(java.awt.event.ActionEvent evt) {
         JFileChooser chooser = new JFileChooser();
-
         chooser.setFileSelectionMode(
                 JFileChooser.FILES_AND_DIRECTORIES
         );
-
         chooser.setDialogTitle("Select a file or folder to scan");
 
-        int result = chooser.showOpenDialog(this);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
+        if (chooser.showOpenDialog(this)
+                == JFileChooser.APPROVE_OPTION) {
             File selectedFile = chooser.getSelectedFile();
-
             pathField.setText(selectedFile.getAbsolutePath());
             statusLabel.setText("Status: Ready to scan");
         }
@@ -188,6 +169,8 @@ public class MainWindow extends javax.swing.JFrame {
 
         try {
             scanner = new Scanner(path);
+            lastReport = null;
+            lastScanStatus = "Scanning";
 
             startBtn.setEnabled(false);
             stopBtn.setEnabled(true);
@@ -196,7 +179,6 @@ public class MainWindow extends javax.swing.JFrame {
             statusLabel.setText("Status: Scanning...");
 
             scanWorker = new SwingWorker<Report, Void>() {
-
                 @Override
                 protected Report doInBackground() {
                     return scanner.startScan();
@@ -210,13 +192,14 @@ public class MainWindow extends javax.swing.JFrame {
 
                     try {
                         Report report = get();
+                        lastReport = report;
 
                         DefaultTableModel model =
                                 (DefaultTableModel) resultTable.getModel();
-
                         model.setRowCount(0);
 
-                        for (String filePath : scanner.getSuspiciousFiles()) {
+                        for (String filePath :
+                                scanner.getSuspiciousFiles()) {
                             model.addRow(new Object[]{
                                 "Suspicious extension",
                                 "Unknown",
@@ -228,20 +211,17 @@ public class MainWindow extends javax.swing.JFrame {
                         progress.setValue(100);
 
                         if (scanner.isStopRequested()) {
+                            lastScanStatus = "Stopped by user";
                             statusLabel.setText("Status: Scan stopped");
                         } else {
+                            lastScanStatus = "Completed";
                             statusLabel.setText("Status: Scan completed");
                         }
 
-                        String message;
-
-                        if (scanner.isStopRequested()) {
-                            message = "Scan stopped.\nFiles flagged: "
-                                    + report.threats;
-                        } else {
-                            message = "Scan completed.\nFiles flagged: "
-                                    + report.threats;
-                        }
+                        String message = "Scan " +
+                                (scanner.isStopRequested()
+                                        ? "stopped." : "completed.") +
+                                "\nFiles flagged: " + report.threats;
 
                         javax.swing.JOptionPane.showMessageDialog(
                                 MainWindow.this,
@@ -251,6 +231,7 @@ public class MainWindow extends javax.swing.JFrame {
                         );
 
                     } catch (Exception ex) {
+                        lastScanStatus = "Failed";
                         statusLabel.setText("Status: Scan failed");
 
                         javax.swing.JOptionPane.showMessageDialog(
@@ -290,137 +271,232 @@ public class MainWindow extends javax.swing.JFrame {
     }
 
     // Quarantine button
-    private void quarantineBtnActionPerformed(java.awt.event.ActionEvent evt) {
-    int selectedRow = resultTable.getSelectedRow();
+    private void quarantineBtnActionPerformed(
+            java.awt.event.ActionEvent evt) {
 
-    if (selectedRow == -1) {
-        javax.swing.JOptionPane.showMessageDialog(
+        int selectedRow = resultTable.getSelectedRow();
+
+        if (selectedRow == -1) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Please select a suspicious file first.",
+                    "No File Selected",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        String filePath =
+                resultTable.getValueAt(selectedRow, 3).toString();
+
+        int confirm = javax.swing.JOptionPane.showConfirmDialog(
                 this,
-                "Please select a suspicious file first.",
-                "No File Selected",
+                "Move this file to quarantine?\n" + filePath,
+                "Confirm Quarantine",
+                javax.swing.JOptionPane.YES_NO_OPTION,
                 javax.swing.JOptionPane.WARNING_MESSAGE
         );
-        return;
+
+        if (confirm != javax.swing.JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        File quarantinedFile = quarantineMgr.quarantine(filePath);
+
+        if (quarantinedFile != null) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "File moved to quarantine successfully.",
+                    "Quarantine Successful",
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+            refreshQuarantineTable();
+        } else {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Could not quarantine the selected file.",
+                    "Quarantine Failed",
+                    javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        }
     }
 
-    String filePath = resultTable.getValueAt(selectedRow, 3).toString();
+    // Refresh the quarantine table
+    private void refreshQuarantineTable() {
+        DefaultTableModel model =
+                (DefaultTableModel) quarantineTable.getModel();
+        model.setRowCount(0);
 
-    int confirm = javax.swing.JOptionPane.showConfirmDialog(
-            this,
-            "Move this file to quarantine?\n" + filePath,
-            "Confirm Quarantine",
-            javax.swing.JOptionPane.YES_NO_OPTION,
-            javax.swing.JOptionPane.WARNING_MESSAGE
-    );
+        for (File file : quarantineMgr.getQuarantinedFiles()) {
+            model.addRow(new Object[]{
+                file.getAbsolutePath(),
+                new java.util.Date(file.lastModified())
+            });
+        }
 
-    if (confirm != javax.swing.JOptionPane.YES_OPTION) {
-        return;
+        restoreBtn.setEnabled(quarantineTable.getRowCount() > 0);
+        deleteBtn.setEnabled(quarantineTable.getRowCount() > 0);
     }
 
-  
-    File quarantinedFile = quarantineMgr.quarantine(filePath);
+    // Restore button
+    private void restoreBtnActionPerformed(
+            java.awt.event.ActionEvent evt) {
 
-    if (quarantinedFile != null) {
+        int selectedRow = quarantineTable.getSelectedRow();
+
+        if (selectedRow == -1) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Please select a quarantined file first.",
+                    "No File Selected",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        String filePath =
+                quarantineTable.getValueAt(selectedRow, 0).toString();
+
+        quarantineMgr.restore(new File(filePath));
+        refreshQuarantineTable();
+
         javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "File moved to quarantine successfully.",
-                "Quarantine Successful",
+                "Restore was requested. Check the original file location "
+                        + "to confirm the result.",
+                "Restore",
                 javax.swing.JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    // Delete button
+    private void deleteBtnActionPerformed(
+            java.awt.event.ActionEvent evt) {
+
+        int selectedRow = quarantineTable.getSelectedRow();
+
+        if (selectedRow == -1) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Please select a quarantined file first.",
+                    "No File Selected",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        String filePath =
+                quarantineTable.getValueAt(selectedRow, 0).toString();
+
+        int confirm = javax.swing.JOptionPane.showConfirmDialog(
+                this,
+                "Permanently delete this quarantined file?\n" + filePath,
+                "Confirm Delete",
+                javax.swing.JOptionPane.YES_NO_OPTION,
+                javax.swing.JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm != javax.swing.JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        quarantineMgr.delete(new File(filePath));
         refreshQuarantineTable();
-    } else {
+
         javax.swing.JOptionPane.showMessageDialog(
                 this,
-                "Could not quarantine the selected file.",
-                "Quarantine Failed",
-                javax.swing.JOptionPane.ERROR_MESSAGE
+                "Delete was requested. Check the quarantine folder "
+                        + "to confirm the result.",
+                "Delete",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
         );
     }
-}
-private void refreshQuarantineTable() {
-    DefaultTableModel model =
-            (DefaultTableModel) quarantineTable.getModel();
 
-    model.setRowCount(0);
+    // Generate Report button
+    private void reportBtnActionPerformed(
+            java.awt.event.ActionEvent evt) {
 
-    for (File file : quarantineMgr.getQuarantinedFiles()) {
-        model.addRow(new Object[]{
-            file.getAbsolutePath(),
-            new java.util.Date(file.lastModified())
-        });
+        if (lastReport == null || scanner == null) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Please complete a scan before generating a report.",
+                    "No Report Available",
+                    javax.swing.JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        StringBuilder text = new StringBuilder();
+        text.append("MINI ANTIVIRUS SCAN REPORT\n");
+        text.append("==========================\n\n");
+        text.append("Scan date: ")
+                .append(lastReport.date)
+                .append("\n");
+        text.append("Scan path: ")
+                .append(scanner.getScanPath())
+                .append("\n");
+        text.append("Threats flagged: ")
+                .append(lastReport.threats)
+                .append("\n");
+        text.append("Scan status: ")
+                .append(lastScanStatus)
+                .append("\n\n");
+        text.append("Suspicious files:\n");
+
+        java.util.List<String> files = scanner.getSuspiciousFiles();
+
+        if (files.isEmpty()) {
+            text.append("No suspicious files were flagged.\n");
+        } else {
+            for (String filePath : files) {
+                text.append("- ").append(filePath).append("\n");
+            }
+        }
+
+        ReportDialog dialog = new ReportDialog(this, true);
+        dialog.setReportText(text.toString());
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
-    restoreBtn.setEnabled(quarantineTable.getRowCount() > 0);
-    deleteBtn.setEnabled(quarantineTable.getRowCount() > 0);
-}
-private void restoreBtnActionPerformed(java.awt.event.ActionEvent evt) {
-    int selectedRow = quarantineTable.getSelectedRow();
+    // Update button
+    private void updateBtnActionPerformed(
+            java.awt.event.ActionEvent evt) {
 
-    if (selectedRow == -1) {
-        javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Please select a quarantined file first.",
-                "No File Selected",
-                javax.swing.JOptionPane.WARNING_MESSAGE
+        try {
+            threatDB.update();
+            updateDatabaseLabel();
+
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "The threat database timestamp has been refreshed.\n"
+                            + "This demo does not download new definitions.",
+                    "Database Update",
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE
+            );
+
+        } catch (RuntimeException ex) {
+            javax.swing.JOptionPane.showMessageDialog(
+                    this,
+                    "Could not update the threat database: "
+                            + ex.getMessage(),
+                    "Update Error",
+                    javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    // Update the database date shown in the GUI
+    private void updateDatabaseLabel() {
+        dbLabel.setText(
+                "Database last updated: " + threatDB.getLastUpdated()
         );
-        return;
     }
 
-    String filePath = quarantineTable.getValueAt(selectedRow, 0).toString();
-
-    File file = new File(filePath);
-    quarantineMgr.restore(file);
-
-    refreshQuarantineTable();
-
-    javax.swing.JOptionPane.showMessageDialog(
-            this,
-            "Restore operation attempted. Please check whether the file returned to its original location.",
-            "Restore",
-            javax.swing.JOptionPane.INFORMATION_MESSAGE
-    );
-}
-private void deleteBtnActionPerformed(java.awt.event.ActionEvent evt) {
-    int selectedRow = quarantineTable.getSelectedRow();
-
-    if (selectedRow == -1) {
-        javax.swing.JOptionPane.showMessageDialog(
-                this,
-                "Please select a quarantined file first.",
-                "No File Selected",
-                javax.swing.JOptionPane.WARNING_MESSAGE
-        );
-        return;
-    }
-
-    String filePath = quarantineTable.getValueAt(selectedRow, 0).toString();
-
-    int confirm = javax.swing.JOptionPane.showConfirmDialog(
-            this,
-            "Permanently delete this quarantined file?\n" + filePath,
-            "Confirm Delete",
-            javax.swing.JOptionPane.YES_NO_OPTION,
-            javax.swing.JOptionPane.WARNING_MESSAGE
-    );
-
-    if (confirm != javax.swing.JOptionPane.YES_OPTION) {
-        return;
-    }
-
-    quarantineMgr.delete(new File(filePath));
-    refreshQuarantineTable();
-
-    javax.swing.JOptionPane.showMessageDialog(
-            this,
-            "Delete operation attempted. Please check the quarantine folder.",
-            "Delete",
-            javax.swing.JOptionPane.INFORMATION_MESSAGE
-    );
-}
     public static void main(String args[]) {
         try {
-            for (javax.swing.UIManager.LookAndFeelInfo info
-                    : javax.swing.UIManager.getInstalledLookAndFeels()) {
+            for (javax.swing.UIManager.LookAndFeelInfo info :
+                    javax.swing.UIManager.getInstalledLookAndFeels()) {
                 if ("Nimbus".equals(info.getName())) {
                     javax.swing.UIManager.setLookAndFeel(info.getClassName());
                     break;
