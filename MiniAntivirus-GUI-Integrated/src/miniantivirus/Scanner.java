@@ -80,6 +80,13 @@ public class Scanner {
     if (stopRequested) {
         return;
     }
+    try {
+    Thread.sleep(100);
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+    stopRequested = true;
+    return;
+}
 
     String name = file.getName().toLowerCase(Locale.ROOT);
 
