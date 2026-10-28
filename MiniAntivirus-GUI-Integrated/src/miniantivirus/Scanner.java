@@ -74,12 +74,19 @@ public class Scanner {
             }
 
         } else if (file.isFile()) {
-            String name = file.getName().toLowerCase(Locale.ROOT);
+    // TESTING ONLY: slow down scanning to test Stop Scan.
+    
 
-            if (name.endsWith(".exe")) {
-                suspiciousFiles.add(file.getAbsolutePath());
-            }
-        }
+    if (stopRequested) {
+        return;
+    }
+
+    String name = file.getName().toLowerCase(Locale.ROOT);
+
+    if (name.endsWith(".exe")) {
+        suspiciousFiles.add(file.getAbsolutePath());
+    }
+}
     }
 
     public void stopScan() {
