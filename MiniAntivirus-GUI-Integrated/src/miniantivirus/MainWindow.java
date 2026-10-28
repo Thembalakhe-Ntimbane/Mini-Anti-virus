@@ -12,14 +12,18 @@ public class MainWindow extends javax.swing.JFrame {
             java.util.logging.Logger.getLogger(MainWindow.class.getName());
 
     private Scanner scanner;
+    private QuarantineMgr quarantineMgr = new QuarantineMgr();
     private SwingWorker<Report, Void> scanWorker;
 
     public MainWindow() {
-        initComponents();
+    initComponents();
 
-        startBtn.addActionListener(this::startBtnActionPerformed);
-        stopBtn.addActionListener(this::stopBtnActionPerformed);
-    }
+    startBtn.addActionListener(this::startBtnActionPerformed);
+    stopBtn.addActionListener(this::stopBtnActionPerformed);
+  
+    restoreBtn.addActionListener(this::restoreBtnActionPerformed);
+    deleteBtn.addActionListener(this::deleteBtnActionPerformed);
+}
 
     
     // <editor-fold defaultstate="collapsed" desc="Generated Code">
@@ -286,11 +290,133 @@ public class MainWindow extends javax.swing.JFrame {
     }
 
     // Quarantine button
-    private void quarantineBtnActionPerformed(
-            java.awt.event.ActionEvent evt) {
-        // Quarantine functionality will be connected in a later step.
+    private void quarantineBtnActionPerformed(java.awt.event.ActionEvent evt) {
+    int selectedRow = resultTable.getSelectedRow();
+
+    if (selectedRow == -1) {
+        javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Please select a suspicious file first.",
+                "No File Selected",
+                javax.swing.JOptionPane.WARNING_MESSAGE
+        );
+        return;
     }
 
+    String filePath = resultTable.getValueAt(selectedRow, 3).toString();
+
+    int confirm = javax.swing.JOptionPane.showConfirmDialog(
+            this,
+            "Move this file to quarantine?\n" + filePath,
+            "Confirm Quarantine",
+            javax.swing.JOptionPane.YES_NO_OPTION,
+            javax.swing.JOptionPane.WARNING_MESSAGE
+    );
+
+    if (confirm != javax.swing.JOptionPane.YES_OPTION) {
+        return;
+    }
+
+  
+    File quarantinedFile = quarantineMgr.quarantine(filePath);
+
+    if (quarantinedFile != null) {
+        javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "File moved to quarantine successfully.",
+                "Quarantine Successful",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE
+        );
+        refreshQuarantineTable();
+    } else {
+        javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Could not quarantine the selected file.",
+                "Quarantine Failed",
+                javax.swing.JOptionPane.ERROR_MESSAGE
+        );
+    }
+}
+private void refreshQuarantineTable() {
+    DefaultTableModel model =
+            (DefaultTableModel) quarantineTable.getModel();
+
+    model.setRowCount(0);
+
+    for (File file : quarantineMgr.getQuarantinedFiles()) {
+        model.addRow(new Object[]{
+            file.getAbsolutePath(),
+            new java.util.Date(file.lastModified())
+        });
+    }
+
+    restoreBtn.setEnabled(quarantineTable.getRowCount() > 0);
+    deleteBtn.setEnabled(quarantineTable.getRowCount() > 0);
+}
+private void restoreBtnActionPerformed(java.awt.event.ActionEvent evt) {
+    int selectedRow = quarantineTable.getSelectedRow();
+
+    if (selectedRow == -1) {
+        javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Please select a quarantined file first.",
+                "No File Selected",
+                javax.swing.JOptionPane.WARNING_MESSAGE
+        );
+        return;
+    }
+
+    String filePath = quarantineTable.getValueAt(selectedRow, 0).toString();
+
+    File file = new File(filePath);
+    quarantineMgr.restore(file);
+
+    refreshQuarantineTable();
+
+    javax.swing.JOptionPane.showMessageDialog(
+            this,
+            "Restore operation attempted. Please check whether the file returned to its original location.",
+            "Restore",
+            javax.swing.JOptionPane.INFORMATION_MESSAGE
+    );
+}
+private void deleteBtnActionPerformed(java.awt.event.ActionEvent evt) {
+    int selectedRow = quarantineTable.getSelectedRow();
+
+    if (selectedRow == -1) {
+        javax.swing.JOptionPane.showMessageDialog(
+                this,
+                "Please select a quarantined file first.",
+                "No File Selected",
+                javax.swing.JOptionPane.WARNING_MESSAGE
+        );
+        return;
+    }
+
+    String filePath = quarantineTable.getValueAt(selectedRow, 0).toString();
+
+    int confirm = javax.swing.JOptionPane.showConfirmDialog(
+            this,
+            "Permanently delete this quarantined file?\n" + filePath,
+            "Confirm Delete",
+            javax.swing.JOptionPane.YES_NO_OPTION,
+            javax.swing.JOptionPane.WARNING_MESSAGE
+    );
+
+    if (confirm != javax.swing.JOptionPane.YES_OPTION) {
+        return;
+    }
+
+    quarantineMgr.delete(new File(filePath));
+    refreshQuarantineTable();
+
+    javax.swing.JOptionPane.showMessageDialog(
+            this,
+            "Delete operation attempted. Please check the quarantine folder.",
+            "Delete",
+            javax.swing.JOptionPane.INFORMATION_MESSAGE
+    );
+}
     public static void main(String args[]) {
         try {
             for (javax.swing.UIManager.LookAndFeelInfo info
