@@ -21,6 +21,12 @@ public class MainWindow extends javax.swing.JFrame {
 
     public MainWindow() {
         initComponents();
+        reportBtn.addActionListener(e -> {
+    javax.swing.JOptionPane.showMessageDialog(
+        this,
+        "Generate Report button is working!"
+    );
+});
 
         startBtn.addActionListener(this::startBtnActionPerformed);
         stopBtn.addActionListener(this::stopBtnActionPerformed);
