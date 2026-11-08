@@ -342,4 +342,13 @@ public class QuarantineMgr {
             return false;
         }
     }
+    public List<File> getQuarantinedFiles() {
+    List<File> files = new ArrayList<>();
+
+    for (Path path : originalFilePaths.keySet()) {
+        files.add(path.toFile());
+    }
+
+    return files;
+}
 }
